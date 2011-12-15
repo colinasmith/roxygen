@@ -24,7 +24,8 @@ register.preref.parsers(parse.value,
                         'source', 
                         'encoding',
                         'description',
-                        'details')
+                        'details',
+                        'methods')
 
 register.preref.parsers(parse.name.description,
                         'param',
@@ -311,6 +312,23 @@ roc_process.had <- function(roclet, partita, base_path) {
     
   }
   
+  all_names <- do.call(c, name_lookup)
+  methods_lookup <- get_values(topics, "methods")
+  name_to_topic <- sapply(invert(get_values(topics, "name")), unique)
+  name_to_title <- get_values(topics, "title")[name_to_topic]
+  names(name_to_title) <- names(name_to_topic)
+  
+  for(topic_name in names(methods_lookup)) {
+    topic <- topics[[topic_name]]
+    
+    all_methods <- methods_lookup[[topic_name]]
+    documented_methods <- all_methods[!is.na(match(all_methods, all_names))]
+    
+    methods_content <- paste("    \\item{\\code{\\link{", documented_methods, "}}}{", name_to_title[documented_methods], "}\n", sep="", collapse="")
+    methods_content <- paste("  \\describe{\n", methods_content, "  }\n", sep="")
+    
+    add_tag(topic, new_tag("section", list(list(name = "Methods", content = methods_content))))
+  }
   
   topics
 }
@@ -372,6 +390,7 @@ roclet_rd_one <- function(partitum, base_path) {
     }))
   add_tag(rd, process_had_tag(partitum, 'section', process.section))
   add_tag(rd, process.examples(partitum, base_path))
+  add_tag(rd, process.methods(partitum))
 
   list(rd = rd, filename = filename)
 }
@@ -561,6 +580,30 @@ process_had_tag <- function(partitum, tag, f = new_tag) {
   if (length(matches) == 0) return()
 
   unlist(lapply(matches, function(p) f(tag, p)), recursive = FALSE)
+}
+
+process.methods <- function(partitum) {
+  if (is.null(partitum$methods) || is.null(partitum$S4class)) {
+    return(NULL)
+  }
+  
+  if (partitum$methods == "auto") {
+  
+  	classInSig <- function(g, where, cl) {
+      cl %in% unique(unlist(findMethods(g)@signatures))
+    }
+    genWithClass <- function(cl, where) {
+      allgen <- getGenerics()
+      ok <- as.logical(unlist(lapply(allgen, classInSig, cl = cl, where = where)))
+      allgen[ok]
+    }
+    
+    generics <- genWithClass(partitum$S4class, topenv(parent.frame()))
+    
+    return(list(new_tag("methods", generics)))
+  }
+  
+  new_tag("section", list(list(name = "Methods", content = partitum$methods)))
 }
 
 # warning("All roxygen elements must have name: ",
